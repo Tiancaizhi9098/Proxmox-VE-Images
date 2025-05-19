@@ -36,14 +36,51 @@ if [ ! -f /usr/bin/pvesh ]; then
     exit 1
 fi
 
-# 检查依赖
+# 检查并安装依赖
 info "检查依赖..."
+missing_deps=()
+
 for cmd in wget jq pvesh qm; do
     if ! command -v $cmd &> /dev/null; then
-        error "缺少依赖: $cmd"
-        exit 1
+        missing_deps+=($cmd)
     fi
 done
+
+if [ ${#missing_deps[@]} -gt 0 ]; then
+    info "正在安装缺少的依赖: ${missing_deps[*]}"
+    
+    # 检查包管理器
+    if command -v apt &> /dev/null; then
+        apt-get update
+        for dep in "${missing_deps[@]}"; do
+            case $dep in
+                jq) apt-get install -y jq ;;
+                wget) apt-get install -y wget ;;
+                # 其他依赖项可能不需要安装，因为它们应该是PVE的一部分
+            esac
+        done
+    elif command -v yum &> /dev/null; then
+        for dep in "${missing_deps[@]}"; do
+            case $dep in
+                jq) yum install -y jq ;;
+                wget) yum install -y wget ;;
+            esac
+        done
+    else
+        error "无法确定包管理器，请手动安装以下依赖: ${missing_deps[*]}"
+        exit 1
+    fi
+    
+    # 再次检查依赖是否安装成功
+    for cmd in "${missing_deps[@]}"; do
+        if ! command -v $cmd &> /dev/null; then
+            error "依赖 $cmd 安装失败，请手动安装后重试"
+            exit 1
+        fi
+    done
+    
+    success "所有依赖已安装"
+fi
 
 # 下载主脚本
 info "下载主脚本..."

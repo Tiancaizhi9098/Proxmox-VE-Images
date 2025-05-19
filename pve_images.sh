@@ -51,25 +51,85 @@ create_temp_dir() {
 
 # 获取所有可用存储
 get_storages() {
-    local storages
-    storages=$(pvesh get /storage --output-format=json | jq -r '.[] | select(.active==1 and .content | contains("images")) | .storage')
+    # 定义变量用于存储存储列表
+    local storage_list=""
+    local storage_content=""
     
-    if [ -z "$storages" ]; then
-        # 如果没有包含images的存储，尝试获取包含vm的存储
-        storages=$(pvesh get /storage --output-format=json | jq -r '.[] | select(.active==1 and .content | contains("vm") or .content | contains("images")) | .storage')
+    # 尝试从API获取存储列表
+    storage_list=$(pvesh get /storage --output-format=json 2>/dev/null)
+    
+    # 检查命令是否成功执行
+    if [ $? -ne 0 ] || [ -z "$storage_list" ]; then
+        # 如果API调用失败，尝试从本地配置文件获取存储
+        if [ -f /etc/pve/storage.cfg ]; then
+            # 解析storage.cfg文件并提取存储名称
+            storage_list=$(grep -E "^[a-z]+ +[a-zA-Z0-9_\-]+" /etc/pve/storage.cfg | awk '{print $2}')
+        else
+            # 如果本地配置文件也不存在，使用默认存储
+            storage_list="local"
+        fi
+    else
+        # 解析JSON并提取存储名称
+        storage_list=$(echo "$storage_list" | jq -r '.[].storage')
     fi
     
-    if [ -z "$storages" ]; then
-        # 如果仍然没有找到合适的存储，获取所有活跃的存储
-        storages=$(pvesh get /storage --output-format=json | jq -r '.[] | select(.active==1) | .storage')
-    fi
+    # 过滤掉不可用的存储
+    local result=""
+    for storage in $storage_list; do
+        # 检查存储是否处于活动状态
+        storage_content=$(pvesh get /storage/$storage --output-format=json 2>/dev/null)
+        if [ $? -eq 0 ] && [ -n "$storage_content" ]; then
+            local active=$(echo "$storage_content" | jq -r '.active // 1')
+            if [ "$active" = "1" ] || [ "$active" = "true" ]; then
+                # 将有效的存储添加到结果中
+                if [ -z "$result" ]; then
+                    result="$storage"
+                else
+                    result="$result $storage"
+                fi
+            fi
+        fi
+    done
     
-    echo "$storages"
+    echo "$result"
 }
 
 # 获取所有可用网卡
 get_bridges() {
-    pvesh get /nodes/$(hostname)/network --output-format=json | jq -r '.[] | select(.type=="bridge" and .active==1) | .iface'
+    # 获取当前主机名
+    local hostname=$(hostname)
+    local bridge_list=""
+    local result=""
+    
+    # 尝试从API获取网络列表
+    bridge_list=$(pvesh get /nodes/$hostname/network --output-format=json 2>/dev/null)
+    
+    # 检查命令是否成功执行
+    if [ $? -ne 0 ] || [ -z "$bridge_list" ]; then
+        # 如果API调用失败，尝试从ifconfig和brctl获取网桥
+        if command -v ifconfig &>/dev/null && command -v brctl &>/dev/null; then
+            # 使用brctl显示所有桥接设备
+            bridge_list=$(brctl show | grep -v "bridge name" | awk '{print $1}' | grep -v "^$")
+        else
+            # 如果brctl不可用，尝试从ip命令获取
+            if command -v ip &>/dev/null; then
+                bridge_list=$(ip link show type bridge | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | cut -d'@' -f1)
+            else
+                # 如果上述方法都失败，使用默认网桥
+                bridge_list="vmbr0"
+            fi
+        fi
+    else
+        # 解析JSON并提取桥接接口名称
+        bridge_list=$(echo "$bridge_list" | jq -r '.[] | select(.type=="bridge" and .active==1) | .iface')
+        
+        # 如果没有找到任何桥接接口，使用默认值
+        if [ -z "$bridge_list" ]; then
+            bridge_list="vmbr0"
+        fi
+    fi
+    
+    echo "$bridge_list"
 }
 
 # 检查并处理重复的VMID

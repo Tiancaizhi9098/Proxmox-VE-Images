@@ -1,6 +1,8 @@
 # Proxmox VE 系统镜像安装工具
 
-![License](https://img.shields.io/github/license/Tiancaizhi9098/Proxmox-VE-Images)
+[![License](https://img.shields.io/github/license/Tiancaizhi9098/Proxmox-VE-Images)](https://github.com/Tiancaizhi9098/Proxmox-VE-Images/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Tiancaizhi9098/Proxmox-VE-Images?style=social)](https://github.com/Tiancaizhi9098/Proxmox-VE-Images/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Tiancaizhi9098/Proxmox-VE-Images?style=social)](https://github.com/Tiancaizhi9098/Proxmox-VE-Images/network/members)
 
 这是一个自动化工具，用于在Proxmox VE平台上快速部署各种Linux系统镜像的模板虚拟机。
 
